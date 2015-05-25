@@ -1,6 +1,4 @@
 module Mech
-  # These are default things that can be overridden.
-  # A DSL should replace these later.
   module Defaults
 
     # This is called when a worker exits.
@@ -8,6 +6,7 @@ module Mech
     # Do not forget to bump the internal and external signals if needed.
     def worker_exited
     end
+
 
     # This is called when a worker is started.
     # Add etcd configuration here.
@@ -24,7 +23,7 @@ module Mech
     # - The name of the image to be started
     # Only the image name is not optional, all other options can be nil.
     def configure_worker
-      return { image: Mech::Manager::TASK }
+      return { image: task }
     end
 
     # This is called whenever a configuration changes in etcd.
@@ -33,7 +32,7 @@ module Mech
     # or an external signal for a dependency,
     # You may call `restart_worker` to restart the worker
     # You may also decide to `exit 0` here.
-    def etcd_config_change(etcd_key)
+    def config_changed(key)
     end
 
     # If the worker needs a specific shutdown procedure, such as calling an exec command on the worker container
@@ -41,7 +40,8 @@ module Mech
     # Return true if a custom shutdown procedure is performed here.
     # Return false if no custom procedure is run, the manager will fall back to simply trying to stop the container.
     def worker_shutdown_procedure
-      return false
+      puts "++++++ Stopping #{task}-#{id}-worker"
+      `docker stop #{task}-#{id}-worker`
     end
 
     # This is called when the worker exits with code 0.

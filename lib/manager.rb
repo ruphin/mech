@@ -1,28 +1,54 @@
-require_relative 'dsl/manager'
-require_relative 'defaults'
+require_relative 'hooks'
 
 module Mech
   class Manager
-    HOST = `hostname`.chomp
 
-    ID = "#{ENV['ID']}"
-    if ID == nil || ID == ""
-      puts '++++++ ERROR: COULD NOT READ ID FROM ENV'
-      puts '++++++ EXITING...'
-      exit 1
+    def initialize(task_name=nil, id=nil)
+      if !task_name
+        puts '++++++ Fatal: You must assign a task name'
+        puts '++++++ Mech.manager(\'my-task\')'
+        puts '++++++ Exiting...'
+        exit 1
+      else
+        @task_name = task_name
+      end
+      if id == nil || id == ""
+        puts '++++++ Fatal: You must assign a task id'
+        puts '++++++ Mech.manager(\'my-task\', id) OR start the container with an ID env variable'
+        puts '++++++ Exiting...'
+        exit 1
+      else
+        @id = id
+      end
+      @hooks = Mech::Hooks.new(self)
+      # TODO: a better way to do this
+      if $USE_ETCD
+        @config_watcher = Mech::Plugins::ETCD::Watcher.new
+        extend Mech::Plugins::ETCD::Utilities
+      else
+        @config_watcher = Mech::Storage::Watcher.new
+        extend Mech::Storage::Utilities
+      end
     end
 
-    include Mech::Defaults
-    include Mech::DSL
+    def task
+      return @task_name
+    end
+
+    def id
+      return @id
+    end
+
+    def hooks
+      return @hooks
+    end
 
     def restart_worker
-      $restart_worker = true
-      if !worker_shutdown_procedure
-        `docker stop #{TASK}-#{ID}-worker`
-      end
+      @restart_worker = true
+      @hooks.worker_shutdown_procedure
       puts '++++++ Waiting for worker shutdown'
-      _, $worker_exit = Process.wait($worker_process)
-      worker_exited
+      _, @worker_exit = Process.wait(@worker_process)
+      @hooks.worker_exited
       puts '++++++ Starting new worker in 5...'
       sleep 5 # Small timeout to allow configs to propagate
       start_worker
@@ -37,13 +63,11 @@ module Mech
       # If the value is already set, the lock cannot be aquired
       # In this case, exit with an error
 
-      # puts "++++++ Aquiring lock for #{TASK}-#{ID}"
-      # lock = `etcdctl mk /managers/#{TASK}/ids/#{ID} '#{HOST}'`.chomp
-      # if lock != "#{HOST}" # Check if we could set the lock
-      #   puts "++++++ ERROR: COULD NOT AQUIRE LOCK: /managers/#{TASK}/ids/#{ID}"
-      #   puts '++++++ EXITING...'
-      #   exit 1
-      # end
+      if !aquire_lock('/managers/#{@task_name}/ids/#{@id}', Mech::HOST)
+        puts "++++++ Fatal: Could not aquire task lock with this id"
+        puts '++++++ Exiting...'
+        exit 1
+      end
 
       ####################################
       # Main loop
@@ -64,34 +88,34 @@ module Mech
       #
       # Whenever the etcd watcher exits, exit manager with error
 
+
       begin # Main
         puts "++++++ STARTING MAIN"
         start_worker
-        etcd_watcher = IO.popen("etcdctl -o json watch /signals/ --recursive --forever", "r:utf-8")
         while true
 
           begin
-            _, $worker_exit = Process.waitpid2($worker_process, Process::WNOHANG)
+            _, @worker_exit = Process.waitpid2(@worker_process, Process::WNOHANG)
           rescue SystemCallError
             puts '++++++ ERROR: WORKER PROCESS DOES NOT EXIST'
             raise
           end
-          if $worker_exit
-            worker_exited # Clean up config
+          if @worker_exit
+            @hooks.worker_exited # Clean up config
 
-            worker_exit_status = $worker_exit.exitstatus
+            worker_exit_status = @worker_exit.exitstatus
             if worker_exit_status == 0
               puts '++++++ Worker task exited with status code 0'
-              if task_completed? || !recover_worker # Stop if we completed our task, or if we cannot recover
+              if @hooks.task_completed? || !recover_worker # Stop if we completed our task, or if we cannot recover
                 break
               end
             elsif worker_exit_status != nil
-              puts "++++++ Error: Worker exited with status code: #{$worker_exit.exitstatus}"
+              puts "++++++ Error: Worker exited with status code: #{@worker_exit.exitstatus}"
               if !recover_worker
                 break
               end
-            elsif worker_exit.signaled?
-              puts "++++++ Error: Worker got killed with signal: #{$worker_exit.to_i}"
+            elsif @worker_exit.signaled?
+              puts "++++++ Error: Worker got killed with signal: #{@worker_exit.to_i}"
               if !recover_worker
                 break
               end
@@ -104,60 +128,39 @@ module Mech
             end
           end
 
-          begin
-            while IO.select([etcd_watcher],[],[],0) # etcd_watcher is readable
-              etcd_line = etcd_watcher.readline
-              begin
-                etcd_json = JSON.parse(etcd_line)
-                if etcd_json['node']
-                  etcd_config_change(etcd_json['node']['key'])
-                end
-              rescue JSON::ParserError
-                puts "++++++ Error: Invalid JSON from etcd watch: #{etcd_line}"
-              end
-            end
-          rescue EOFError => e # etcd watch is broken
-            puts '++++++ ERROR: ETCD WATCH IS BROKEN. EXITING'
-            break
+          @config_watcher.changes do |change|
+            @hooks.config_changed(change)
           end
 
           sleep(1)
         end
       ensure
         puts '++++++ Initiating shutdown sequence'
-        if !$worker_exit && $worker_process
+        if !@worker_exit && @worker_process
           puts '++++++ Killing worker process'
-          if !worker_shutdown_procedure
-            `docker stop #{TASK}-#{ID}-worker`
-          end
+          @hooks.worker_shutdown_procedure
           puts '++++++ Waiting for worker shutdown'
-          Process.wait($worker_process)
-          worker_exited
+          Process.wait(@worker_process)
+          @hooks.worker_exited
         end
 
-        if etcd_watcher && !etcd_watcher.closed?
-          puts '++++++ Killing etcd process'
-          Process.kill('TERM', etcd_watcher.pid)
-          puts '++++++ Waiting for etcd shutdown'
-          etcd_watcher.close
+        @config_watcher.close
+
+        puts "++++++ Releasing lock for #{@task_name}-#{@id}"
+        if !release_lock("/managers/#{@task_name}/ids/#{@id}")
+          puts '++++++ Error: Failed to release lock'
         end
 
-        puts "++++++ Releasing lock for #{TASK}-#{ID}"
-        `etcdctl rm /managers/#{TASK}/ids/#{ID}`
-
-        if worker_exit_status == 0 && task_completed?
+        if worker_exit_status == 0 && @hooks.task_completed?
           puts '++++++ Worker task completed. Exiting'
         else
           puts '++++++ Exiting'
         end
       end
-
-      # TODO: Catch docker stop from parent and adjust exit status and message accordingly.
-      puts '++++++ Unexpected termination. Exiting'
-      exit 1
     end
 
     private
+
     ####################################
     # Start a worker
     ##
@@ -170,22 +173,24 @@ module Mech
     # If it does, ruby will start the command with a `sh -c` wrapper, causing Process.kill to fail
     #
     def start_worker
-      options = configure_worker
-      if !options.is_a?(Hash) || !options[:image]
+      configuration = @hooks.configure_worker
+      if !configuration.is_a?(Hash) || !configuration[:image]
         puts '++++++ Fatal: No image returned by configure_worker.'
         puts '++++++ Exiting...'
         exit 1
       end
-      env = options[:env].map { |var,value| "-e #{var}=#{value} "}.join if options[:env]
-      volumes = options[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if options[:volumes]
-      ports = options[:ports].map { |host,container| "-p #{host}:#{container} "}.join if options[:ports]
-      hostname = "-h #{options[:hostname]} " if options[:hostname]
-      `docker rm #{TASK}-#{ID}-worker 2>/dev/null`
-      command = "docker run --rm #{env}#{volumes}#{ports}#{hostname}--name=#{TASK}-#{ID}-worker #{options[:image]}"
+      env = configuration[:env].map { |var,value| "-e #{var}=#{value} "}.join if configuration[:env]
+      volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes]
+      ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports]
+      hostname = "-h #{configuration[:hostname]} " if configuration[:hostname]
+      `docker rm #{@task_name}-#{@id}-worker 2>/dev/null`
+      command = "docker run --rm #{env}#{volumes}#{ports}#{hostname}--name=#{@task_name}-#{@id}-worker #{configuration[:image]}"
       puts "++++++ Starting worker process: #{command}"
-      $worker_process = Process.spawn(command)
+      @worker_process = Process.spawn(command)
       sleep 1
-      worker_started
+      # TODO: Check if container didn't die during startup?
+      @current_config = configuration
+      @hooks.worker_started
     end
 
     def recover_worker

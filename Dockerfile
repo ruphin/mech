@@ -13,5 +13,8 @@ RUN wget https://get.docker.io/builds/Linux/x86_64/docker-latest -O /usr/bin/doc
 
 ENTRYPOINT ["ruby", "/mech/bin/mech.rb"]
 
+WORKDIR /mech
+
 COPY bin /mech/bin
 COPY lib /mech/lib
+COPY test /mech/managers/

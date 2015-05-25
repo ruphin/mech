@@ -10,4 +10,9 @@ Mech.manager('mongo') do
       hostname: 'mongohost'
     }
   end
+
+  def config_changed(change)
+    puts change
+  end
+
 end
