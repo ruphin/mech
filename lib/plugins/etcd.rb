@@ -31,25 +31,25 @@ module Mech
             return []
           elsif json.key?('node') && json['node']['dir']
             # json['node']['nodes'].map { |k| k['key'] }
-            if json['node']['nodes']
-              return get_ls_result_recursive json['node']['nodes'], keys_only
-            else
-              return []
-            end
+            return get_ls_result_recursive json['node']['nodes'], keys_only
           else
             raise 'ls only supports directories, use get instead'
           end
         end
 
         def get_ls_result_recursive(nodes, keys_only = false)
-          result = []
-          nodes.each do |node|
-            result << node['key'] unless keys_only && is_dir?(node)
-            if is_dir? node
-              result += get_ls_result_recursive node['nodes'], keys_only
+          if nodes.nil?
+            return []
+          else
+            result = []
+            nodes.each do |node|
+              result << node['key'] unless keys_only && is_dir?(node)
+              if is_dir? node
+                result += get_ls_result_recursive node['nodes'], keys_only
+              end
             end
+            return result
           end
-          return result
         end
 
         def set(key, value, options={})
