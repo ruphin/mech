@@ -1,5 +1,7 @@
 require '/mech/lib/main'
 
+$USE_ETCD = true
+
 Mech.manager('mongo') do
   def configure_worker
     return {

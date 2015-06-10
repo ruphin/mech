@@ -23,6 +23,7 @@ module Mech
       @hooks = Mech::Hooks.new(self)
       # TODO: a better way to do this
       if $USE_ETCD
+        require_relative 'plugins/etcd'
         @config_watcher = Mech::Plugins::ETCD::Watcher.new
         extend Mech::Plugins::ETCD::Utilities
       else
@@ -63,7 +64,7 @@ module Mech
       # If the value is already set, the lock cannot be aquired
       # In this case, exit with an error
 
-      if !aquire_lock('/managers/#{@task_name}/ids/#{@id}', Mech::HOST)
+      if !aquire_lock("/managers/#{@task_name}/ids/#{@id}", Mech::HOST)
         puts "++++++ Fatal: Could not aquire task lock with this id"
         puts '++++++ Exiting...'
         exit 1
@@ -147,9 +148,7 @@ module Mech
         @config_watcher.close
 
         puts "++++++ Releasing lock for #{@task_name}-#{@id}"
-        if !release_lock("/managers/#{@task_name}/ids/#{@id}")
-          puts '++++++ Error: Failed to release lock'
-        end
+        release_lock("/managers/#{@task_name}/ids/#{@id}")
 
         if worker_exit_status == 0 && @hooks.task_completed?
           puts '++++++ Worker task completed. Exiting'

@@ -37,11 +37,9 @@ module Mech
 
     # If the worker needs a specific shutdown procedure, such as calling an exec command on the worker container
     # it can be performed here.
-    # Return true if a custom shutdown procedure is performed here.
-    # Return false if no custom procedure is run, the manager will fall back to simply trying to stop the container.
     def worker_shutdown_procedure
       puts "++++++ Stopping #{task}-#{id}-worker"
-      `docker stop #{task}-#{id}-worker`
+      `docker kill -s TERM #{task}-#{id}-worker`
     end
 
     # This is called when the worker exits with code 0.
