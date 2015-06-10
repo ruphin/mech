@@ -11,10 +11,6 @@ module Mech
           json = parse_response res
 
           if json.nil? || json.key?('errorCode')
-            puts "|| RETURNING NIL?"
-            puts "|| KEY: #{key}"
-            puts "|| RESPONSE: #{res}"
-            puts "|| JSON: #{json}"
             return nil
           elsif json.key?('node') && json['node']['dir']
             raise 'get does not support directories, use ls instead'
@@ -135,7 +131,6 @@ module Mech
               http ||= Net::HTTP.new('127.0.0.1', 2379)
               sleep [times, 10].min # sleep max ten seconds
               times += 1
-              puts "||| #{method} #{path}"
               res = http.send_request(method, path)
               succeeded = expected_codes.include? res.code.to_i
               if times > 10
