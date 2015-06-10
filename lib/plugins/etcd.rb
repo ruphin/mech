@@ -165,7 +165,7 @@ module Mech
             puts '++++++ Error: etcd watcher process already started'
           else
             puts '++++++ Starting etcd watcher process'
-            @watch_thread, @watch_reader = Mech::Plugins::ETCD.watch("orchestration/#{Mech::HOST}")
+            @watch_thread, @watch_reader = Mech::Plugins::ETCD.watch("signals/")
           end
         end
 
