@@ -98,6 +98,8 @@ module Mech
 
                     next_index = "&waitIndex=#{index + 1}"
                   else
+                    puts "++++++ ETCD Watch recieved non-200 response code: #{response.code}"
+                    puts "++++++ Response body: #{response.body}"
                     raise 'Response code != 200'
                   end
                 rescue Net::ReadTimeout
@@ -210,14 +212,14 @@ module Mech
           Mech::Plugins::ETCD.ls(key)
         end
 
-        def aquire_lock(key, value)
-          puts "++++++ Attempting to aquire lock: #{key} -> #{value}"
+        def acquire_lock(key, value)
+          puts "++++++ Attempting to acquire lock: #{key} -> #{value}"
           lock = Mech::Plugins::ETCD.make(key, value)
           if lock || value == Mech::Plugins::ETCD.get(key)
-            puts "++++++ Successfully aquired lock: #{key} -> #{value}"
+            puts "++++++ Successfully acquired lock: #{key} -> #{value}"
             return true
           else
-            puts "++++++ Error: Could not aquire lock: #{key} -> #{value}"
+            puts "++++++ Error: Could not acquire lock: #{key} -> #{value}"
             return false
           end
         end

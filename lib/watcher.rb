@@ -25,7 +25,7 @@ module Mech
     end
 
     module Utilities
-      def aquire_lock(key, value)
+      def acquire_lock(key, value)
         if Mech::Storage::STORE[key]
           return false
         else

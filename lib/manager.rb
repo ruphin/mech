@@ -1,3 +1,4 @@
+require 'json'
 require_relative 'hooks'
 
 module Mech
@@ -47,8 +48,11 @@ module Mech
     def restart_worker
       @restart_worker = true
       @hooks.worker_shutdown_procedure
-      puts '++++++ Waiting for worker shutdown'
-      _, @worker_exit = Process.wait(@worker_process)
+      sleep 2
+      while (status = worker_status)[:running]
+        puts '++++++ Waiting for worker shutdown'
+        sleep 2
+      end
       @hooks.worker_exited
       puts '++++++ Starting new worker in 5...'
       sleep 5 # Small timeout to allow configs to propagate
@@ -57,15 +61,15 @@ module Mech
 
     def start
       ####################################
-      # Aquire the lock for this manager
+      # Acquire the lock for this manager
       ##
       #
       # This attempts to set a specific value in etcd
-      # If the value is already set, the lock cannot be aquired
+      # If the value is already set, the lock cannot be acquired
       # In this case, exit with an error
 
-      if !aquire_lock("/managers/#{@task_name}/ids/#{@id}", Mech::HOST)
-        puts "++++++ Fatal: Could not aquire task lock with this id"
+      if !acquire_lock("/managers/#{@task_name}/ids/#{@id}", Mech::HOST)
+        puts "++++++ Fatal: Could not acquire task lock with this id"
         puts '++++++ Exiting...'
         exit 1
       end
@@ -95,34 +99,18 @@ module Mech
         start_worker
         while true
 
-          begin
-            _, @worker_exit = Process.waitpid2(@worker_process, Process::WNOHANG)
-          rescue SystemCallError
-            puts '++++++ ERROR: WORKER PROCESS DOES NOT EXIST'
-            raise
-          end
-          if @worker_exit
+          worker = worker_status
+          if worker[:exited]
             @hooks.worker_exited # Clean up config
 
-            worker_exit_status = @worker_exit.exitstatus
-            if worker_exit_status == 0
-              puts '++++++ Worker task exited with status code 0'
+            worker_exit_code = worker[:exit_code]
+            if worker_exit_code == 0
+              puts '++++++ Worker exited with exit code: 0'
               if @hooks.task_completed? || !recover_worker # Stop if we completed our task, or if we cannot recover
                 break
               end
-            elsif worker_exit_status != nil
-              puts "++++++ Error: Worker exited with status code: #{@worker_exit.exitstatus}"
-              if !recover_worker
-                break
-              end
-            elsif @worker_exit.signaled?
-              puts "++++++ Error: Worker got killed with signal: #{@worker_exit.to_i}"
-              if !recover_worker
-                break
-              end
             else
-              # This shouldn't happen, but it's here just in case
-              puts '++++++ ERROR: WORKER EXITED WITH UNKNOWN REASON'
+              puts "++++++ Error: Worker exited with exit code: #{worker_exit_code}"
               if !recover_worker
                 break
               end
@@ -133,15 +121,19 @@ module Mech
             @hooks.config_changed(change)
           end
 
-          sleep(1)
+          sleep 1
         end
       ensure
         puts '++++++ Initiating shutdown sequence'
-        if !@worker_exit && @worker_process
+
+        if (status = worker_status)[:running]
           puts '++++++ Killing worker process'
           @hooks.worker_shutdown_procedure
-          puts '++++++ Waiting for worker shutdown'
-          Process.wait(@worker_process)
+          sleep 2
+          while (status = worker_status)[:running]
+            puts '++++++ Waiting for worker shutdown'
+            sleep 2
+          end
           @hooks.worker_exited
         end
 
@@ -150,10 +142,12 @@ module Mech
         puts "++++++ Releasing lock for #{@task_name}-#{@id}"
         release_lock("/managers/#{@task_name}/ids/#{@id}")
 
-        if worker_exit_status == 0 && @hooks.task_completed?
+        if status[:exit_code] == 0 && @hooks.task_completed?
           puts '++++++ Worker task completed. Exiting'
+          exit 0
         else
           puts '++++++ Exiting'
+          exit status[:exit_code]
         end
       end
     end
@@ -182,14 +176,37 @@ module Mech
       volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes]
       ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports]
       hostname = "-h #{configuration[:hostname]} " if configuration[:hostname]
-      `docker rm #{@task_name}-#{@id}-worker 2>/dev/null`
-      command = "docker run --rm #{env}#{volumes}#{ports}#{hostname}--name=#{@task_name}-#{@id}-worker #{configuration[:image]}"
+      image = configuration[:image]
+      name = "#{task}-#{id}-worker"
+      `docker rm #{name} 2>/dev/null`
+      `docker pull #{image} 2>&1 2>/dev/null`
+      command = "docker run --log-driver=syslog -d #{env}#{volumes}#{ports}#{hostname}--name=#{name} #{image}"
       puts "++++++ Starting worker process: #{command}"
-      @worker_process = Process.spawn(command)
-      sleep 1
-      # TODO: Check if container didn't die during startup?
-      @current_config = configuration
-      @hooks.worker_started
+      `#{command}`
+
+      count = 1
+      while (status = worker_status; status[:exists] == false && status[:started] == false)
+        puts "++++++ Waiting for worker #{name} to start"
+        count += 1
+        if count > 10 # Waited over 65 seconds
+          puts "++++++ Fatal: Worker #{name} won't start"
+          exit 1
+        end
+        sleep count
+      end
+
+      if status[:running] == true
+        puts "++++++ Worker #{name} started successfully"
+        @current_config = configuration
+        @hooks.worker_started
+      elsif status[:exited] == true
+        puts "++++++ Worker #{name} exited prematurely with exit code: #{status[:exit_code]}"
+        sleep 5 # Sleep for a short period to avoid restarting immediately
+        recover_worker
+      else
+        puts "++++++ Fatal: Worker #{name} failed to start coherently"
+        exit 1
+      end
     end
 
     def recover_worker
@@ -205,6 +222,42 @@ module Mech
         start_worker
       end
       return true
+    end
+
+    def worker_status
+      name = "#{task}-#{id}-worker"
+      status_json = `docker inspect --format '{{ json .State }}' #{name} 2>/dev/null`
+      if status_json == ''
+        return {
+          exists: false
+        }
+      else
+        status = JSON.parse(status_json)
+        if status['StartedAt'] == '0001-01-01T00:00:00Z'
+          # Container is being created, but has not been started
+          return {
+            exists: true,
+            started: false
+          }
+        elsif status['Running']
+          return {
+            exists: true,
+            started: true,
+            running: true,
+          }
+        elsif status['Running'] == false && status['FinshedAt'] != '0001-01-01T00:00:00Z'
+          return {
+            exists: true,
+            started: true,
+            exited: true,
+            exit_code: status['ExitCode']
+          }
+        else
+          puts "++++++ Fatal: Incoherent status result for #{name}"
+          puts "++++++ Status: #{status_json}"
+          exit 1
+        end
+      end
     end
   end
 end
