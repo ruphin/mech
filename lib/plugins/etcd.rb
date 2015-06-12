@@ -182,7 +182,7 @@ module Mech
         def changes
           begin
             while IO.select([@watch_reader],[],[],0) # @watch_reader has readable changes
-              etcd_change = @watch_reader.readline
+              etcd_change = @watch_reader.readline.chomp
               yield etcd_change
             end
           rescue EOFError => e # etcd watch is broken
