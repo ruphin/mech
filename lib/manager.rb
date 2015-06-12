@@ -146,8 +146,8 @@ module Mech
           puts '++++++ Worker task completed. Exiting'
           exit 0
         else
-          puts '++++++ Exiting'
-          exit status[:exit_code]
+          puts '++++++ Exiting due to some failure'
+          exit 1
         end
       end
     end
@@ -178,7 +178,7 @@ module Mech
       hostname = "-h #{configuration[:hostname]} " if configuration[:hostname]
       image = configuration[:image]
       name = "#{task}-#{id}-worker"
-      `docker rm #{name} 2>/dev/null`
+      `docker rm -v #{name} 2>/dev/null`
       `docker pull #{image} 2>&1 2>/dev/null`
       command = "docker run --log-driver=syslog -d #{env}#{volumes}#{ports}#{hostname}--name=#{name} #{image}"
       puts "++++++ Starting worker process: #{command}"
