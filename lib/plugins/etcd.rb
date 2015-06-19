@@ -95,13 +95,15 @@ module Mech
                     else
                       index = response['X-Etcd-Index'].to_i
                     end
-
-                    next_index = "&waitIndex=#{index + 1}"
+                  elsif response.code == '400' && (json = JSON.parse(response.body))['message'] == "The event in requested index is outdated and cleared"
+                    puts "++++++ Watching outdated changes, refreshing watch index"
+                    index = response['X-Etcd-Index'].to_i
                   else
                     puts "++++++ ETCD Watch recieved non-200 response code: #{response.code}"
                     puts "++++++ Response body: #{response.body}"
                     raise 'Response code != 200'
                   end
+                  next_index = "&waitIndex=#{index + 1}"
                 rescue Net::ReadTimeout
                   puts "++++++ Timeout when watching for changes, retrying"
                 rescue Exception => e
