@@ -175,7 +175,7 @@ module Mech
       env = configuration[:env].map { |var,value| "-e #{var}='#{value}' "}.join if configuration[:env]
       volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes]
       ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports]
-      hostname = "-h #{configuration[:hostname]} " if configuration[:hostname]
+      hostname = configuration[:hostname] ? "-h #{configuration[:hostname]} " : "-h #{task}-#{id} "
       image = configuration[:image]
       name = "#{task}-#{id}-worker"
       `docker rm -v #{name} 2>/dev/null`
