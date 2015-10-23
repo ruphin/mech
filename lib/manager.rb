@@ -180,7 +180,7 @@ module Mech
       name = "#{task}-#{id}-worker"
       `docker rm -v #{name} 2>/dev/null`
       `docker pull #{image} 2>&1 2>/dev/null`
-      command = "docker run --log-driver=syslog -d #{env}#{volumes}#{ports}#{hostname}--name=#{name} #{image}"
+      command = "docker run --log-driver=syslog --log-opt syslog-tag='#{name}' -d #{env}#{volumes}#{ports}#{hostname}--name=#{name} #{image}"
       puts "++++++ Starting worker process: #{command}"
       `#{command}`
 
