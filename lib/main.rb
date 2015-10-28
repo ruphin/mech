@@ -8,8 +8,7 @@ end
 
 module Mech
   HOST = `hostname`.chomp
-  STORE = {}
-
+  ENVIRONMENT = ENV['ENVIRONMENT']
   ID = ENV['ID']
 
   def self.manager(task_name, id=nil, &definition)

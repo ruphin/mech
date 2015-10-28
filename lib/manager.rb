@@ -21,6 +21,15 @@ module Mech
       else
         @id = id
       end
+      if !ENVIRONMENT || ENVIRONMENT == ''
+        puts '++++++ Warning: No environment set'
+        puts '++++++ You should start this container with an \'ENVIRONMENT\' env variable'
+        puts '++++++ Defaulting to \'production\''
+        @environment = 'production'
+      else
+        @environment = ENVIRONMENT
+      end
+
       @hooks = Mech::Hooks.new(self)
       # TODO: a better way to do this
       if $USE_ETCD
@@ -171,12 +180,17 @@ module Mech
         puts '++++++ Fatal: No image returned by configure_worker.'
         puts '++++++ Exiting...'
         exit 1
+      elsif configuration[:image].include?(':')
+        puts '++++++ Fatal: Image returned by configure_worker contains a tag.'
+        puts '++++++ Configure the tag through the ENVIRONMENT env variable.'
+        puts '++++++ Exiting...'
+        exit 1
       end
       env = configuration[:env].map { |var,value| "-e #{var}='#{value}' "}.join if configuration[:env]
       volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes]
       ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports]
       hostname = configuration[:hostname] ? "-h #{configuration[:hostname]} " : "-h #{task}-#{id} "
-      image = configuration[:image]
+      image = "#{configuration[:image]}:#{@environment}"
       name = "#{task}-#{id}-worker"
       `docker rm -v #{name} 2>/dev/null`
       `docker pull #{image} 2>&1 2>/dev/null`
