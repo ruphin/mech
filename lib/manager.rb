@@ -187,11 +187,19 @@ module Mech
       volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes]
       ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports]
       hostname = configuration[:hostname] ? "-h #{configuration[:hostname]} " : "-h #{task}-#{id} "
+      flags = ''
+      (configuration[:flags] || {}).each do |flag, value|
+        if value
+          flags += "--#{flag}=#{value} "
+        else
+          flags += "--#{flag} "
+        end
+      end
       image = configuration[:image]
       name = "#{task}-#{id}-worker"
       `docker rm -v #{name} 2>/dev/null`
       `docker pull #{image} 2>&1 2>/dev/null`
-      command = "docker run --log-driver=syslog --log-opt syslog-tag=#{name} -d #{env}#{volumes}#{ports}#{hostname}--name=#{name} #{image}"
+      command = "docker run --log-driver=syslog --log-opt syslog-tag=#{name} -d #{flags}#{env}#{volumes}#{ports}#{hostname}--name=#{name} #{image}"
       puts "++++++ Starting worker process: #{command}"
       `#{command}`
 
