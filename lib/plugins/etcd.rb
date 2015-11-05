@@ -197,9 +197,12 @@ module Mech
       end
 
       module Utilities
-
         def set_value(key, value)
           Mech::Plugins::ETCD.set(key, value)
+        end
+
+        def set_constant(key, value)
+          return !!(Mech::Plugins::ETCD.make(key, value) || value == Mech::Plugins::ETCD.get(key))
         end
 
         def get_value(key)
