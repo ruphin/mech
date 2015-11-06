@@ -132,6 +132,10 @@ module Mech
 
           sleep 1
         end
+      rescue => e
+        puts '+++++++ Fatal Exception'
+        puts e.message
+        puts e.backtrace.join("\n")
       ensure
         puts '++++++ Initiating shutdown sequence'
 
