@@ -16,7 +16,7 @@ VERSION_MAP = {
 }
 
 # Swap to the correct docker client
-version_error =`docker version 2>&1`.split("\n").last[/Error response from daemon: client and server don't have same version.*/]
+version_error =`docker version 2>&1`.split("\n").last[/Error response from daemon: (client and server don't have same version|client is newer than server).*/]
 if version_error
 	server_api_version = version_error[/server\sAPI\sversion:\s\d\.\d\d/][/\d\.\d\d/]
 	client_version = VERSION_MAP[server_api_version]
