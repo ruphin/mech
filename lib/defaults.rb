@@ -38,8 +38,8 @@ module Mech
     # If the worker needs a specific shutdown procedure, such as calling an exec command on the worker container
     # it can be performed here.
     def worker_shutdown_procedure
-      puts "++++++ Stopping #{task}-#{id}-worker"
-      `docker kill -s TERM #{task}-#{id}-worker`
+      puts "++++++ Stopping #{task}-#{id}"
+      `docker kill -s TERM #{task}-#{id}`
     end
 
     # This is called when the worker exits with code 0.

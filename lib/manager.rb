@@ -187,6 +187,7 @@ module Mech
       elsif !configuration[:image].include?(':')
         configuration[:image] += ":#{@environment}"
       end
+      (configuration[:env] ||= {})[:environment] = @environment
       env = configuration[:env].map { |var,value| "-e #{var}='#{value}' "}.join if configuration[:env]
       volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes]
       ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports]
@@ -200,7 +201,7 @@ module Mech
         end
       end
       image = configuration[:image]
-      name = "#{task}-#{id}-worker"
+      name = "#{task}-#{id}"
       `docker rm -v #{name} 2>/dev/null`
       `docker pull #{image} 2>&1 2>/dev/null`
       command = "docker run --log-driver=syslog --log-opt syslog-tag=#{name} -d #{flags}#{env}#{volumes}#{ports}#{hostname}--name=#{name} #{image}"
@@ -248,7 +249,7 @@ module Mech
     end
 
     def worker_status
-      name = "#{task}-#{id}-worker"
+      name = "#{task}-#{id}"
       status_json = `docker inspect --format '{{ json .State }}' #{name} 2>/dev/null`
       if status_json == ''
         return {
