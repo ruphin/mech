@@ -187,7 +187,7 @@ module Mech
       elsif !configuration[:image].include?(':')
         configuration[:image] += ":#{@environment}"
       end
-      (configuration[:env] ||= {})[:environment] = @environment
+      (configuration[:env] ||= {})['ENVIRONMENT'] = @environment
       env = configuration[:env].map { |var,value| "-e #{var}='#{value}' "}.join if configuration[:env]
       volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes]
       ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports]
