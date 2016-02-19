@@ -251,36 +251,37 @@ module Mech
     def worker_status
       name = "#{task}-#{id}"
       status_json = `docker inspect --format '{{ json .State }}' #{name} 2>/dev/null`
-      if status_json == ''
+      begin
+        status = JSON.parse(status_json)
+      rescue JSON::ParserError
+        puts "++++++ Could not parse worker status"
         return {
           exists: false
         }
+      end
+      if status['StartedAt'] == '0001-01-01T00:00:00Z'
+        # Container is being created, but has not been started
+        return {
+          exists: true,
+          started: false
+        }
+      elsif status['Running']
+        return {
+          exists: true,
+          started: true,
+          running: true,
+        }
+      elsif status['Running'] == false && status['FinshedAt'] != '0001-01-01T00:00:00Z'
+        return {
+          exists: true,
+          started: true,
+          exited: true,
+          exit_code: status['ExitCode']
+        }
       else
-        status = JSON.parse(status_json)
-        if status['StartedAt'] == '0001-01-01T00:00:00Z'
-          # Container is being created, but has not been started
-          return {
-            exists: true,
-            started: false
-          }
-        elsif status['Running']
-          return {
-            exists: true,
-            started: true,
-            running: true,
-          }
-        elsif status['Running'] == false && status['FinshedAt'] != '0001-01-01T00:00:00Z'
-          return {
-            exists: true,
-            started: true,
-            exited: true,
-            exit_code: status['ExitCode']
-          }
-        else
-          puts "++++++ Fatal: Incoherent status result for #{name}"
-          puts "++++++ Status: #{status_json}"
-          exit 1
-        end
+        puts "++++++ Fatal: Incoherent status result for #{name}"
+        puts "++++++ Status: #{status_json}"
+        exit 1
       end
     end
   end
