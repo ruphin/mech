@@ -10,8 +10,6 @@ $stdout.sync = true
 
 # A map of docker Server API versions to client versions
 VERSION_MAP = {
-	'1.19' => '1.7',
-	'1.20' => '1.8',
 	'1.21' => '1.9',
 	'1.22' => '1.10'
 }

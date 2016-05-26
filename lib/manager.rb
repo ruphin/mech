@@ -188,9 +188,9 @@ module Mech
         configuration[:image] += ":#{@environment}"
       end
       (configuration[:env] ||= {})['ENVIRONMENT'] = @environment
-      env = configuration[:env].map { |var,value| "-e #{var}='#{value}' "}.join if configuration[:env]
-      volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes]
-      ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports]
+      env = configuration[:env].map { |var,value| "-e #{var}='#{value}' "}.join if configuration[:env].kind_of?(Array)
+      volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes].kind_of?(Array)
+      ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports].kind_of?(Array)
       hostname = configuration[:hostname] ? "-h #{configuration[:hostname]} " : "-h #{task}-#{id} "
       flags = ''
       (configuration[:flags] || {}).each do |flag, value|
@@ -201,10 +201,12 @@ module Mech
         end
       end
       image = configuration[:image]
+      command = configuration[:command]
+      arguments = configuration[:arguments].join(' ') if configuration[:arguments].kind_of?(Array)
       name = "#{task}-#{id}"
       `docker rm -v #{name} 2>/dev/null`
       `docker pull #{image} 2>&1 2>/dev/null`
-      command = "docker run --log-driver=syslog --log-opt syslog-tag=#{name} -d #{flags}#{env}#{volumes}#{ports}#{hostname}--name=#{name} #{image}"
+      command = "docker run --log-driver=syslog --log-opt syslog-tag=#{name} -d #{flags}#{env}#{volumes}#{ports}#{hostname}--name=#{name} #{image} #{command} #{arguments}"
       puts "++++++ Starting worker process: #{command}"
       `#{command}`
 
