@@ -55,7 +55,7 @@ module Mech
     end
 
     def restart_worker
-      @restart_worker = true
+      @worker_restarting = true
       @hooks.worker_shutdown_procedure
       sleep 2
       while (status = worker_status)[:running]
@@ -66,6 +66,8 @@ module Mech
       puts '++++++ Starting new worker in 5...'
       sleep 5 # Small timeout to allow configs to propagate
       start_worker
+      worker_restarting
+      @worker_restarting = false
     end
 
     def start
@@ -132,8 +134,11 @@ module Mech
 
           sleep 1
         end
+      rescue SignalException => e
+        puts "++++++ Received signal: #{e}"
+        @external_shutdown = true
       rescue => e
-        puts '+++++++ Fatal Exception'
+        puts '++++++ Fatal Exception'
         puts e.message
         puts e.backtrace.join("\n")
       ensure
@@ -155,12 +160,14 @@ module Mech
         puts "++++++ Releasing lock for #{@task_name}-#{@id}"
         release_lock("/managers/#{@task_name}/ids/#{@id}")
 
-        if status[:exit_code] == 0 && @hooks.task_completed?
-          puts '++++++ Worker task completed. Exiting'
-          exit 0
-        else
-          puts '++++++ Exiting due to some failure'
-          exit 1
+        if !@external_shutdown
+          if status[:exit_code] == 0 && @hooks.task_completed?
+            puts '++++++ Worker task completed. Exiting'
+            exit 0
+          else
+            puts '++++++ Exiting due to some failure'
+            exit 1
+          end
         end
       end
     end
