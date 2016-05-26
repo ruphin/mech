@@ -271,7 +271,7 @@ module Mech
           started: true,
           running: true,
         }
-      elsif status['Running'] == false && status['FinshedAt'] != '0001-01-01T00:00:00Z'
+      elsif status['Running'] == false && status['FinishedAt'] != '0001-01-01T00:00:00Z'
         return {
           exists: true,
           started: true,
