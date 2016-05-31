@@ -195,21 +195,14 @@ module Mech
         configuration[:image] += ":#{@environment}"
       end
       (configuration[:env] ||= {})['ENVIRONMENT'] = @environment
-      env = configuration[:env].map { |var,value| "-e #{var}='#{value}' "}.join if configuration[:env].kind_of?(Array)
-      volumes = configuration[:volumes].map { |host,container| "-v #{host}:#{container} "}.join if configuration[:volumes].kind_of?(Array)
-      ports = configuration[:ports].map { |host,container| "-p #{host}:#{container} "}.join if configuration[:ports].kind_of?(Array)
-      hostname = configuration[:hostname] ? "-h #{configuration[:hostname]} " : "-h #{task}-#{id} "
-      flags = ''
-      (configuration[:flags] || {}).each do |flag, value|
-        if value
-          flags += "--#{flag}=#{value} "
-        else
-          flags += "--#{flag} "
-        end
-      end
-      image = configuration[:image]
-      command = configuration[:command]
-      arguments = configuration[:arguments].join(' ') if configuration[:arguments].kind_of?(Array)
+      env =        configuration[:env].map { |var,value| "-e #{var}='#{value}' "}.join
+      volumes =   (configuration[:volumes] || {}).map { |host,container| "-v #{host}:#{container} "}.join
+      ports =     (configuration[:ports] || {}).map { |host,container| "-p #{host}:#{container} "}.join
+      hostname =   configuration[:hostname] ? "-h #{configuration[:hostname]} " : "-h #{task}-#{id} "
+      flags =     (configuration[:flags] || {}).map { |flag, value| value ? "--#{flag}=#{value} " : "--#{flag} "}.join
+      image =      configuration[:image]
+      command =    configuration[:command]
+      arguments = (configuration[:arguments] || []).join(' ')
       name = "#{task}-#{id}"
       `docker rm -v #{name} 2>/dev/null`
       `docker pull #{image} 2>&1 2>/dev/null`
