@@ -66,7 +66,6 @@ module Mech
       puts '++++++ Starting new worker in 5...'
       sleep 5 # Small timeout to allow configs to propagate
       start_worker
-      worker_restarting
       @worker_restarting = false
     end
 
