@@ -106,7 +106,10 @@ module Mech
 
       begin # Main
         puts "++++++ STARTING MAIN"
-        start_worker
+        if !worker_status[:running]
+          start_worker
+        end
+
         while true
 
           worker = worker_status
@@ -136,6 +139,9 @@ module Mech
       rescue SignalException => e
         puts "++++++ Received signal: #{e}"
         @external_shutdown = true
+      rescue Mech::Plugins::ETCD::WatchException => e
+        puts "++++++ ETCD watch failure"
+        @keepalive_worker = true
       rescue => e
         puts '++++++ Fatal Exception'
         puts e.message
@@ -143,7 +149,7 @@ module Mech
       ensure
         puts '++++++ Initiating shutdown sequence'
 
-        if (status = worker_status)[:running]
+        if !@keepalive_worker && (status = worker_status)[:running]
           puts '++++++ Killing worker process'
           @hooks.worker_shutdown_procedure
           sleep 2

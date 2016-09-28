@@ -162,6 +162,9 @@ module Mech
         end
       end
 
+      class WatchException < StandardError
+      end
+
       class Watcher
 
         def initialize
@@ -187,11 +190,8 @@ module Mech
               etcd_change = @watch_reader.readline.chomp
               yield etcd_change
             end
-          rescue EOFError => e # etcd watch is broken
-            puts '++++++ Fatal: ETCD watch is broken'
-            close
-            puts '++++++ Exiting...'
-            exit 1
+          rescue EOFError => e
+            raise WatchException.new
           end
         end
       end
